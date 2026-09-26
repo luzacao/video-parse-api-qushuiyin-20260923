@@ -1,85 +1,54 @@
-## 今日推荐：豆包、即梦 AI 视频分享链也能去水印了
+早上好，今天聊点对接时会让人挠头的事：Key 怎么买、为什么会被限、错误码到底在说什么。先把门敲开——体验站是 [https://video.zacao.top](https://video.zacao.top)，访问密码 `zacao`，打开输进去就能贴链接试。
 
-**想给豆包、即梦 AI 生成的视频去水印？打开 [https://video.zacao.top](https://video.zacao.top)，密码 `zacao`，粘链接就出无水印地址。**
+**问：我就是想先看一眼效果，不注册行不行？**
 
-这两天后台收到最多的一类问题，不是抖音、也不是快手，而是：「豆包生成的视频能不能去水印」「即梦的分享链能解析吗」。
+答：行。首页可以不背 Key 直接试用，每个 IP 每小时 30 次。你贴一条抖音或者快手的分享口令进去，接口会自己从文案里把链接抠出来，不用手动拆 `v.douyin.com` 那串短链。觉得顺手，再去 [https://video.zacao.top/buy](https://video.zacao.top/buy) 自助下单拿正式 Key。
 
-以前 AI 生成视频的分享链比较尴尬——它长得不像短视频平台的短链，很多工具直接识别失败；要么就是识别出来了，拿到的还是带水印的对话页预览。现在这一块补上了：`doubao.com`、`dola.com`、`jimeng.jianying.com` 的分享链接，已经进了自动分流名单，调用方不需要传 `platform`，接口按域名自己判断。
+**问：拿到 Key 之后往哪塞？**
 
-也就是说，你从豆包 App 或网页里点「分享」拿到的链接，直接丢给接口就行。
-
----
-
-## 适合谁
-
-- **做 AI 视频二次剪辑的人**：豆包、即梦生成的素材想剪进自己的片子里，带水印的预览版没法用，需要拿到干净的视频地址。
-- **做内容归档 / 备份的人**：AI 生成的作品越攒越多，想把原始视频和封面存下来，用接口批量拉比手动一个个下省事。
-- **接了解析能力的产品方**：你的应用里已经有抖音、快手去水印，用户现在开始问「豆包的行不行」，那就顺手把这块补齐。
-- **纯想试试的人**：首页不用 Key，每个 IP 每小时 30 次，先跑通再说。
-
-不管你是哪种，[https://video.zacao.top](https://video.zacao.top) 都是同一个入口。
-
----
-
-## 怎么试
-
-### 第一步：网页先跑一遍
-
-打开 [https://video.zacao.top](https://video.zacao.top)，输入访问密码 `zacao`，进首页后把豆包 / 即梦的分享链接粘进去。能出结果，说明这条链是通的，再考虑接 API。
-
-首页体验**不需要带 Key**，每个 IP 每小时限 30 次。
-
-### 第二步：正式对接
-
-Base URL 是 `https://video.zacao.top`，解析接口是 `POST /api/parse`，鉴权走 Header `X-API-Key`。
+答：Base URL 是 `https://video.zacao.top`，解析接口是 `POST /api/parse`，Header 里带 `X-API-Key`。也支持 `Authorization: Bearer` 或者 body/query 里放 `api_key`，但推荐 Header，干净。文档在 [https://video.zacao.top/docs](https://video.zacao.top/docs)，字段含义写得比较细。
 
 ```bash
 curl -X POST 'https://video.zacao.top/api/parse' \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: mp_xxxx' \
-  -d '{"text":"https://www.doubao.com/thread/xxxxx"}'
+  -d '{"text":"https://v.kuaishou.com/xxxxx"}'
 ```
 
-`text` 字段可以直接丢整段分享口令，接口会自己从文案里把链接抽出来，不用先手动拆。
+**问：用户跑着跑着说「429 了」，我该怎么跟他解释？**
 
-Python 版本：
+答：先分清是匿名额度还是你的 Key 出问题。429 基本是匿名 IP 小时额度用尽，默认 30 次——这种情况引导用户去 [https://video.zacao.top/buy](https://video.zacao.top/buy) 拿 Key，换成带 `X-API-Key` 的请求就行。403 是 Key 无效、被禁用，或者内容本身不可访问；401 是服务端开了强制鉴权而你没带 Key。这几个别混着报，不然用户只会觉得「接口挂了」。
 
-```python
-import requests
+**问：那 400、404、500 呢，要不要原样透给前端？**
 
-r = requests.post(
-    "https://video.zacao.top/api/parse",
-    headers={"X-API-Key": "mp_xxxx"},
-    json={"text": "https://jimeng.jianying.com/xxxxx"},
-    timeout=30,
-)
-print(r.json())
-```
+答：建议做一层翻译。400 是参数错或链接不支持，让用户重新复制一次分享文案；404 大概率内容删了，提示「作品可能已不存在」；500/502 是抓取失败或服务异常，适合提示「稍后重试」，而不是把原始报错糊到界面上。下面这张表可以直接抄进你的错误处理。
 
-返回的 `data.video_url` 是可播放地址，`source_video_url` 是原始地址，`cover_url` 是封面。图集类内容走 `image_list`，元素可能是字符串，也可能是带 `live_photo_url` 的对象，按需取。
+| code | 含义 | 给用户的话术 |
+| --- | --- | --- |
+| 400 | 参数错误 / 链接不支持 | 请重新复制分享链接再试 |
+| 401 | 缺少 API Key | 服务配置问题，请联系客服 |
+| 403 | Key 无效 / 内容不可访问 | 内容暂时取不到，换个链接试试 |
+| 404 | 内容可能已删除 | 作品可能已删除 |
+| 429 | 匿名 IP 额度用尽 | 免费次数已用完，购买 Key 继续 |
+| 500/502 | 服务异常或抓取失败 | 稍后重试 |
 
-### 第三步：拿 Key
+**问：限流这块，我自己要不要再加一层？**
 
-正式对接的 Key 在 [https://video.zacao.top/buy](https://video.zacao.top/buy) 自助下单。完整字段说明、错误码、`/api/parse/v2` 的兼容字段、`/api/detail` 的作品数据、`/api/video/stream` 的代理播放，都在 [https://video.zacao.top/docs](https://video.zacao.top/docs) 里。
+答：要。接口侧有匿名限制，但你的业务侧最好按用户维度做队列和缓存。同一个 `video_id` 短时间重复请求，直接回缓存；`source_video_url` 有时效，别当永久地址存。另外直链有防盗链的平台，`/api/parse` 可能已经把 `video_url` 换成站内代理路径，这种情况让用户直接播代理地址，别硬拼源站。
+
+**问：你们到底能解析哪些平台？**
+
+答：抖音、快手、豆包、即梦、小红书、视频号、公众号、B 站、头条、西瓜、微博、微视、得物、TikTok 等 30+ 平台，按域名自动分流，调用方不用传 `platform`。探活可以打一下 `GET /api/health`，上线前先确认服务是通的。
+
+**去水印这件事，在 video.zacao.top 上先试再买最省心**——不用先付款猜效果。
 
 ---
 
-## 两个容易踩的点
+**现在就去试：**
 
-**豆包 / 即梦别传对话页 URL。** 要用 App 或网页里「分享」按钮给出的那个链接，不是浏览器地址栏里当前页的地址。对话页的内部 URL 解析不了，这是最常见的失败原因。
+- 体验站：[https://video.zacao.top](https://video.zacao.top)，密码 `zacao`
+- 接口文档：[https://video.zacao.top/docs](https://video.zacao.top/docs)
+- 购买 Key：[https://video.zacao.top/buy](https://video.zacao.top/buy)
+- GitHub：[https://github.com/luzacao/video-parse-api](https://github.com/luzacao/video-parse-api)
 
-**直链有时效。** 解析成功后尽快转存，别把 `source_video_url` 当永久地址缓存起来。部分平台有防盗链，`video_url` 可能会被换成站内代理路径，这是正常的。
-
-快手、小红书偶发解析失败时，让用户重新复制一次完整分享文案再试，短链有时候会缺参数。
-
----
-
-## 现在就去试
-
-- **体验网址**：[https://video.zacao.top](https://video.zacao.top)
-- **访问密码**：`zacao`
-- **接口文档**：[https://video.zacao.top/docs](https://video.zacao.top/docs)
-- **购买 Key**：[https://video.zacao.top/buy](https://video.zacao.top/buy)
-- **GitHub**：[https://github.com/luzacao/video-parse-api](https://github.com/luzacao/video-parse-api)
-
-打开 [https://video.zacao.top](https://video.zacao.top)，输入 `zacao`，先拿一条豆包分享链试试。
+把 Key、限流、错误码三件事跟用户讲明白，对接就差不了。
